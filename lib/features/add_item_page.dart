@@ -1,59 +1,80 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'add_item_page.dart';
 
-class AddItemPage extends StatefulWidget {
-  const AddItemPage({super.key});
+class InventoryPage extends StatefulWidget {
+  const InventoryPage({super.key});
 
   @override
-  State<AddItemPage> createState() => _AddItemPageState();
+  State<InventoryPage> createState() => _InventoryPageState();
 }
 
-class _AddItemPageState extends State<AddItemPage> {
-  final nameController = TextEditingController();
-  final quantityController = TextEditingController();
-  final reorderController = TextEditingController();
-
+class _InventoryPageState extends State<InventoryPage> {
   final supabase = Supabase.instance.client;
+  List<dynamic> items = [];
 
-  Future<void> saveItem() async {
-    await supabase.from('inventory_items').insert({
-      'name': nameController.text.trim(),
-      'quantity': int.parse(quantityController.text.trim()),
-      'reorder_level': int.parse(reorderController.text.trim()),
+  @override
+  void initState() {
+    super.initState();
+    fetchItems();
+  }
+
+  Future<void> fetchItems() async {
+    final response = await supabase
+        .from('inventory_items')
+        .select()
+        .order('created_at');
+
+    setState(() {
+      items = response;
     });
+  }
 
-    if (mounted) Navigator.pop(context);
+  Future<void> deleteItem(String id) async {
+    await supabase.from('inventory_items').delete().eq('id', id);
+    fetchItems();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Add Inventory Item")),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            TextField(
-              controller: nameController,
-              decoration: const InputDecoration(labelText: "Item Name"),
+      appBar: AppBar(title: const Text("Inventory")),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () async {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const AddItemPage()),
+          );
+          fetchItems();
+        },
+        child: const Icon(Icons.add),
+      ),
+      body: ListView.builder(
+        itemCount: items.length,
+        itemBuilder: (context, index) {
+          final item = items[index];
+          final isLowStock =
+              item['quantity'] <= item['reorder_level'];
+
+          return Card(
+            child: ListTile(
+              title: Text(item['name']),
+              subtitle: Text(
+                  "Qty: ${item['quantity']} | Reorder: ${item['reorder_level']}"),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (isLowStock)
+                    const Icon(Icons.warning, color: Colors.red),
+                  IconButton(
+                    icon: const Icon(Icons.delete),
+                    onPressed: () => deleteItem(item['id']),
+                  ),
+                ],
+              ),
             ),
-            TextField(
-              controller: quantityController,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: "Quantity"),
-            ),
-            TextField(
-              controller: reorderController,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: "Reorder Level"),
-            ),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: saveItem,
-              child: const Text("Save Item"),
-            )
-          ],
-        ),
+          );
+        },
       ),
     );
   }
